@@ -1,7 +1,7 @@
 FROM node:12-alpine3.15
-LABEL "repository"="https://github.com/anothrNick/github-tag-action"
-LABEL "homepage"="https://github.com/anothrNick/github-tag-action"
-LABEL "maintainer"="Nick Sjostrom"
+LABEL "repository"="https://github.com/Cavaler/github-tag-action"
+LABEL "homepage"="https://github.com/Cavaler/github-tag-action"
+LABEL "maintainer"="Pavel Kostromitinov"
 
 COPY entrypoint.sh /entrypoint.sh
 
