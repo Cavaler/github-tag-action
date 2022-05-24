@@ -43,21 +43,21 @@ tagFmt="^$prefix([0-9]+\.[0-9]+\.[0-9]+)$"
 # get latest tag that looks like a semver with prefix
 case "$tag_context" in
     *repo*) 
-        tag="$(git for-each-ref --sort=-v:refname --format '%(refname:lstrip=2)' | grep -E "$tagFmt" | head -n 1)"
-        if [ ! -z "$tag" ]
+        cur_tag="$(git for-each-ref --sort=-v:refname --format '%(refname:lstrip=2)' | grep -E "$tagFmt" | head -n 1)"
+        if [ ! -z "$cur_tag" ]
         then
-            tagver="$(echo $tag | sed -n -r "s/$tagFmt/\1/p")"
-            echo Tag: $tag ver: $tagver
+            cur_ver="$(echo $cur_tag | sed -n -r "s/$tagFmt/\1/p")"
+            echo Tag: $cur_tag ver: $cur_ver
         else
             echo No tag found
         fi
         ;;
     *branch*) 
-        tag="$(git tag --list --merged HEAD --sort=-v:refname | grep -E "$tagFmt" | head -n 1)"
-        if [ ! -z "$tag" ]
+        cur_tag="$(git tag --list --merged HEAD --sort=-v:refname | grep -E "$tagFmt" | head -n 1)"
+        if [ ! -z "$cur_tag" ]
         then
-            tagver="$(echo $tag | sed -n -r "s/$tagFmt/\1/p")"
-            echo Tag: $tag ver: $tagver
+            cur_ver="$(echo $cur_tag | sed -n -r "s/$tagFmt/\1/p")"
+            echo Tag: $cur_tag ver: $cur_ver
         else
             echo No tag found
         fi
@@ -67,24 +67,29 @@ esac
 
 
 # if there are none, start tags at INITIAL_VERSION which defaults to 0.0.0
-if [ -z "$tag" ]
+if [ -z "$cur_tag" ]
 then
     echo "Zero tag"
     log=$(git log --pretty='%B')
-    tagver="$initial_version"
+    cur_ver="$initial_version"
+    cur_tag="$prefix$cur_ver"
 else
-    log=$(git log $tag..HEAD --pretty='%B')
+    log=$(git log $cur_tag..HEAD --pretty='%B')
     # get current commit hash for tag
-    tag_commit=$(git rev-list -n 1 $tag)
-    echo "Tag is $tag at $tag_commit"
+    tag_commit=$(git rev-list -n 1 $cur_tag)
+    echo "Tag is $cur_tag at $tag_commit"
 fi
+
+echo ::set-output name=cur_tag::$cur_tag
+echo ::set-output name=cur_ver::$cur_ver
 
 # get current commit hash
 commit=$(git rev-parse HEAD)
 
 if [ "$tag_commit" == "$commit" ]; then
     echo "No new commits since previous tag. Skipping..."
-    echo ::set-output name=tag::$tag
+    echo ::set-output name=new_tag::$cur_tag
+    echo ::set-output name=new_ver::$cur_ver
     exit 0
 fi
 
@@ -95,53 +100,56 @@ then
 fi
 
 case "$log" in
-    *#major* ) new=$(semver -i major $tagver); part="major";;
-    *#minor* ) new=$(semver -i minor $tagver); part="minor";;
-    *#patch* ) new=$(semver -i patch $tagver); part="patch";;
+    *#major* ) new=$(semver -i major $cur_ver); part="major";;
+    *#minor* ) new=$(semver -i minor $cur_ver); part="minor";;
+    *#patch* ) new=$(semver -i patch $cur_ver); part="patch";;
     *#none* ) 
-        echo "Default bump was set to none. Skipping..."; echo ::set-output name=new_tag::$tag; echo ::set-output name=tag::$tag; exit 0;;
+        echo "Default bump was set to none. Skipping..."
+        echo ::set-output name=new_tag::$cur_tag
+        echo ::set-output name=new_ver::$cur_ver
+        exit 0
+        ;;
     * ) 
         if [ "$default_semvar_bump" == "none" ]; then
-            echo "Default bump was set to none. Skipping..."; echo ::set-output name=new_tag::$tag; echo ::set-output name=tag::$tag; exit 0 
+            echo "Default bump was set to none. Skipping..."
+            echo ::set-output name=new_tag::$cur_tag
+            echo ::set-output name=new_ver::$cur_ver
+            exit 0 
         else 
-            new=$(semver -i "${default_semvar_bump}" $tagver); part=$default_semvar_bump 
+            new_ver=$(semver -i "${default_semvar_bump}" $cur_ver); part=$default_semvar_bump 
         fi 
         ;;
 esac
 
-echo $part
-
-new="$prefix$new"
+new_tag="$prefix$new_ver"
 
 if [ ! -z $custom_tag ]
 then
-    new="$custom_tag"
+    new_tag="$custom_tag"
 fi
 
-echo -e "Bumping tag ${tag}. New tag ${new}"
+echo -e "Bumping tag ${cur_tag} with $part. New version ${new_ver}, tag ${new_tag}"
 
 # set outputs
-echo ::set-output name=new_tag::$new
+echo ::set-output name=new_ver::$new_ver
+echo ::set-output name=new_tag::$new_tag
 echo ::set-output name=part::$part
 
 # use dry run to determine the next tag
 if $dryrun
 then
-    echo ::set-output name=tag::$tag
     exit 0
 fi 
 
-echo ::set-output name=tag::$new
-
 # create local git tag
-git tag $new
+git tag $new_tag
 
 # push new tag ref to github
 dt=$(date '+%Y-%m-%dT%H:%M:%SZ')
 full_name=$GITHUB_REPOSITORY
 git_refs_url=$(jq .repository.git_refs_url $GITHUB_EVENT_PATH | tr -d '"' | sed 's/{\/sha}//g')
 
-echo "$dt: **pushing tag $new to repo $full_name"
+echo "$dt: **pushing tag $new_tag to repo $full_name"
 
 git_refs_response=$(
 curl -s -X POST $git_refs_url \
@@ -149,7 +157,7 @@ curl -s -X POST $git_refs_url \
 -d @- << EOF
 
 {
-  "ref": "refs/tags/$new",
+  "ref": "refs/tags/$new_tag",
   "sha": "$commit"
 }
 EOF
@@ -158,7 +166,7 @@ EOF
 git_ref_posted=$( echo "${git_refs_response}" | jq .ref | tr -d '"' )
 
 echo "::debug::${git_refs_response}"
-if [ "${git_ref_posted}" = "refs/tags/${new}" ]; then
+if [ "${git_ref_posted}" = "refs/tags/${new_tag}" ]; then
   exit 0
 else
   echo "::error::Tag was not created properly."
