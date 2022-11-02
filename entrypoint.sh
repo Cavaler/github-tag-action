@@ -33,6 +33,10 @@ echo -e "\tINITIAL_VERSION: ${initial_version}"
 echo -e "\tTAG_CONTEXT: ${tag_context}"
 echo -e "\tVERBOSE: ${verbose}"
 
+setOutput() {
+    echo "${1}=${2}" >> "${GITHUB_OUTPUT}"
+}
+
 current_branch=$(git rev-parse --abbrev-ref HEAD)
 
 # fetch tags
@@ -80,16 +84,16 @@ else
     echo "Tag is $cur_tag at $tag_commit"
 fi
 
-echo ::set-output name=cur_tag::$cur_tag
-echo ::set-output name=cur_ver::$cur_ver
+setOutput "cur_tag" "$cur_tag"
+setOutput "cur_ver" "$cur_ver"
 
 # get current commit hash
 commit=$(git rev-parse HEAD)
 
 if [ "$tag_commit" == "$commit" ]; then
     echo "No new commits since previous tag. Skipping..."
-    echo ::set-output name=new_tag::$cur_tag
-    echo ::set-output name=new_ver::$cur_ver
+    setOutput "new_tag" "$cur_tag"
+    setOutput "new_ver" "$cur_ver"
     exit 0
 fi
 
@@ -105,15 +109,15 @@ case "$log" in
     *#patch* ) new=$(semver -i patch $cur_ver); part="patch";;
     *#none* ) 
         echo "Default bump was set to none. Skipping..."
-        echo ::set-output name=new_tag::$cur_tag
-        echo ::set-output name=new_ver::$cur_ver
+        setOutput "new_tag" "$cur_tag"
+        setOutput "new_ver" "$cur_ver"
         exit 0
         ;;
     * ) 
         if [ "$default_semvar_bump" == "none" ]; then
             echo "Default bump was set to none. Skipping..."
-            echo ::set-output name=new_tag::$cur_tag
-            echo ::set-output name=new_ver::$cur_ver
+            setOutput "new_tag" "$cur_tag"
+            setOutput "new_ver" "$cur_ver"
             exit 0 
         else 
             new_ver=$(semver -i "${default_semvar_bump}" $cur_ver); part=$default_semvar_bump 
@@ -131,9 +135,9 @@ fi
 echo -e "Bumping tag ${cur_tag} with $part. New version ${new_ver}, tag ${new_tag}"
 
 # set outputs
-echo ::set-output name=new_ver::$new_ver
-echo ::set-output name=new_tag::$new_tag
-echo ::set-output name=part::$part
+setOutput "new_ver" "$new_ver"
+setOutput "new_tag" "$new_tag"
+setOutput "part" "$part"
 
 # use dry run to determine the next tag
 if $dryrun
