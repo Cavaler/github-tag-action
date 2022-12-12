@@ -1,16 +1,38 @@
 name: Bump version
 on:
-  push:
+  pull_request:
+    types: [closed]
     branches:
       - master
+    paths:
+      - 'datafilter/**'
+      - '.github/workflows/*datafilter*'
+
 jobs:
   build:
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    permissions: write-all
     steps:
-    - uses: actions/checkout@master
+    - name: Checkout
+      uses: actions/checkout@v3
       with:
         fetch-depth: '0'
+
+    - name: Output
+      run: |
+        git status
+
     - name: Bump version and push tag
-      uses: anothrNick/github-tag-action@master
+      uses: Cavaler/github-tag-action@1.42.0
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Output
+        run: |
+          echo ref: ${{ github.ref }}
+          echo head_ref: ${{ github.head_ref }}
+          echo base_ref: ${{ github.base_ref }}
