@@ -10,6 +10,7 @@ custom_tag=${CUSTOM_TAG}
 source=${SOURCE:-.}
 dryrun=${DRY_RUN:-false}
 initial_version=${INITIAL_VERSION:-0.0.0}
+bump_on_initial=${BUMP_ON_INITIAL:-true}
 tag_context=${TAG_CONTEXT:-repo}
 verbose=${VERBOSE:-true}
 # since https://github.blog/2022-04-12-git-security-vulnerability-announced/ runner uses?
@@ -30,6 +31,7 @@ echo -e "\tCUSTOM_TAG: ${custom_tag}"
 echo -e "\tSOURCE: ${source}"
 echo -e "\tDRY_RUN: ${dryrun}"
 echo -e "\tINITIAL_VERSION: ${initial_version}"
+echo -e "\tBUMP_ON_INITIAL: ${bump_on_initial}"
 echo -e "\tTAG_CONTEXT: ${tag_context}"
 echo -e "\tVERBOSE: ${verbose}"
 
@@ -73,10 +75,16 @@ esac
 # if there are none, start tags at INITIAL_VERSION which defaults to 0.0.0
 if [ -z "$cur_tag" ]
 then
-    echo "Zero tag"
     log=$(git log --pretty='%B')
     cur_ver="$initial_version"
     cur_tag="$prefix$cur_ver"
+    if $bump_on_initial
+    then
+        echo "No tag found, setting version to $initial_version"
+    else
+        default_semvar_bump="none"
+        echo "No tag found, setting version to $initial_version and no bump"
+    fi
 else
     log=$(git log $cur_tag..HEAD --pretty='%B')
     # get current commit hash for tag
